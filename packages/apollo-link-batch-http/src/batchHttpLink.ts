@@ -130,7 +130,24 @@ export class BatchHttpLink extends ApolloLink {
 
       return new Observable<FetchResult[]>(observer => {
         // the raw response is attached to the context in the BatchingLink
+        // that last comment is a total lie
+        // see: https://github.com/apollographql/apollo-link/issues/550
         fetcher(chosenURI, options)
+          .then(response => {
+            // monkey patch each operation's getContext() call to return the raw response
+            operations.forEach(operation => {
+              const getContext = operation.getContext;
+              if (getContext().patched) return;
+
+              operation.getContext = () => ({
+                ...getContext(),
+                patched: true,
+                response,
+              });
+            });
+
+            return response;
+          })
           .then(parseAndCheckHttpResponse(operations))
           .then(result => {
             // we have data and can send it to back up the link chain
